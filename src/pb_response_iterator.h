@@ -1,4 +1,4 @@
-// Copyright 2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright 2023-2025, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions
@@ -43,6 +43,7 @@ class ResponseIterator {
   void* Id();
   void Clear();
   std::vector<std::shared_ptr<InferResponse>> GetExistingResponses();
+  void Cancel();
 
  private:
   std::vector<std::shared_ptr<InferResponse>> responses_;

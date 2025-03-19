@@ -1136,6 +1136,8 @@ Stub::ServiceStubToParentRequests()
       } else if (
           utils_msg_payload->command_type == PYTHONSTUB_IsRequestCancelled) {
         SendIsCancelled(utils_msg_payload);
+      } else if (utils_msg_payload->command_type == PYTHONSTUB_CancelBLSDecoupledInferRequest) {
+        SendCancelBLSDecoupledRequest(utils_msg_payload);
       } else {
         std::cerr << "Error when sending message via stub_to_parent message "
                      "buffer - unknown command\n";
@@ -1217,6 +1219,45 @@ Stub::EnqueueCleanupId(void* id, const PYTHONSTUB_CommandType& command_type)
   if (id != nullptr) {
     std::unique_ptr<UtilsMessagePayload> utils_msg_payload =
         std::make_unique<UtilsMessagePayload>(command_type, id);
+    EnqueueUtilsMessage(std::move(utils_msg_payload));
+  }
+}
+
+void
+Stub::SendCancelBLSDecoupledRequest(
+    std::unique_ptr<UtilsMessagePayload>& utils_msg_payload)
+{
+  void* id = utils_msg_payload->utils_message_ptr;
+
+  std::unique_ptr<IPCMessage> ipc_message =
+      IPCMessage::Create(shm_pool_, true /* inline_response */);
+  ipc_message->Command() = PYTHONSTUB_CancelBLSDecoupledInferRequest;
+  AllocatedSharedMemory<char> cancel_bls_decoupled_request_message =
+      shm_pool_->Construct<char>(
+          sizeof(CancelBLSDecoupledRequestMessage) +
+          sizeof(bi::managed_external_buffer::handle_t));
+  CancelBLSDecoupledRequestMessage* cancel_bls_decoupled_request_message_ptr =
+      reinterpret_cast<CancelBLSDecoupledRequestMessage*>(cancel_bls_decoupled_request_message.data_.get());
+  cancel_bls_decoupled_request_message_ptr->id = id;
+  cancel_bls_decoupled_request_message_ptr->waiting_on_stub = false;
+  ipc_message->Args() = cancel_bls_decoupled_request_message.handle_;
+
+  {
+    bi::scoped_lock<bi::interprocess_mutex> lock{
+        *(ipc_message->ResponseMutex())};
+    SendIPCUtilsMessage(ipc_message);
+    while (!cancel_bls_decoupled_request_message_ptr->waiting_on_stub) {
+      ipc_message->ResponseCondition()->wait(lock);
+    }
+  }
+}
+
+void 
+Stub::EnqueueCancelBLSDecoupledRequest(void* id)
+{
+  if (id != nullptr) {
+    std::unique_ptr<UtilsMessagePayload> utils_msg_payload =
+        std::make_unique<UtilsMessagePayload>(PYTHONSTUB_CancelBLSDecoupledInferRequest, id);
     EnqueueUtilsMessage(std::move(utils_msg_payload));
   }
 }
@@ -1909,7 +1950,8 @@ PYBIND11_EMBEDDED_MODULE(c_python_backend_utils, module)
             it.Iter();
             return it;
           })
-      .def("__next__", &ResponseIterator::Next);
+      .def("__next__", &ResponseIterator::Next)
+      .def("cancel", &ResponseIterator::Cancel);
 
   py::class_<Logger> logger(module, "Logger");
   py::enum_<LogLevel>(logger, "LogLevel")

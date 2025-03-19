@@ -1,4 +1,4 @@
-// Copyright 2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright 2023-2025, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions
@@ -157,6 +157,27 @@ ResponseIterator::GetExistingResponses()
   is_cleared_ = true;
 
   return responses;
+}
+
+void
+ResponseIterator::Cancel()
+{
+  py::gil_scoped_release release;
+
+  std::unique_ptr<Stub>& stub = Stub::GetOrCreateInstance();
+  if (!stub->StubToParentServiceActive()) {
+    throw PythonBackendException("Cannot communicate with parent service");
+  }
+
+  if (!stub->IsInitialized() || stub->IsFinalizing()) {
+    throw PythonBackendException(
+        "Cancelling a BLS decoupled response iterator is only supported during "
+        "the 'execute' function.");
+  }
+
+  if (!is_finished_) {
+    stub->EnqueueCancelBLSDecoupledRequest(id_);
+  }
 }
 
 }}}  // namespace triton::backend::python

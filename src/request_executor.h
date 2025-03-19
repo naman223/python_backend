@@ -1,4 +1,4 @@
-// Copyright 2021-2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright 2021-2025, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions
@@ -27,6 +27,7 @@
 #pragma once
 
 #include <memory>
+#include <unordered_set>
 
 #include "infer_payload.h"
 #include "infer_request.h"
@@ -41,11 +42,15 @@ class RequestExecutor {
   TRITONSERVER_ResponseAllocator* response_allocator_ = nullptr;
   TRITONSERVER_Server* server_;
   std::unique_ptr<SharedMemoryManager>& shm_pool_;
+  std::mutex on_going_request_addresses_mu_;
+  std::unordered_set<intptr_t> on_going_request_addresses_;
 
  public:
   std::future<std::unique_ptr<InferResponse>> Infer(
       std::shared_ptr<InferRequest>& infer_request,
       std::shared_ptr<InferPayload>& infer_payload);
+  void EraseRequestAddress(intptr_t request_address);
+  void Cancel(std::shared_ptr<InferPayload>& infer_payload);
 
   RequestExecutor(
       std::unique_ptr<SharedMemoryManager>& shm_pool,
